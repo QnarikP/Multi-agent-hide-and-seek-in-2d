@@ -1,0 +1,6 @@
+gym
+torch
+matplotlib
+numpy
+imageio
+imageio[ffmpeg]
