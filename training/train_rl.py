@@ -6,17 +6,12 @@ We create two independent DQN agents—one for the seeker and one for the hider.
 At each step:
   - The environment is reset.
   - Each agent selects an action using an epsilon-greedy policy.
-  - The environment processes the actions and returns the next state along with door/vision rewards.
-  - Reward rules:
-        * If the seeker sees the hider (once active), the seeker gets +10 and the hider gets -10.
-        * Otherwise, if the hider is inside the room, it gains +1 reward.
-        * Door actions provide additional rewards:
-             - Hider "toggle_door": if door open then +2, if door closed then -1.
-             - Hider "lock": if door closed and inside room: +4, if door open: -5.
-             - Hider "unlock": if inside room and door closed+locked: -5.
-             - Seeker "lock" on open door: +7.
+  - The environment processes the actions and returns the next state along with rewards.
+  - Reward rules (very simple):
+        * If the active seeker sees the hider, the seeker gets +1 and the hider gets -1.
+        * Additionally, if the hider is inside the room, it gains +1 reward.
   - The agents store experiences and perform training steps.
-  - Target networks are updated periodically.
+  - The target networks are updated periodically.
 
 This version ensures GPU usage (if available) and uses our visualization utilities.
 """
@@ -30,7 +25,7 @@ from utils.logger import log_info
 from utils.visualization import visualize_all_metrics
 
 # Hyperparameters
-num_episodes = 1e6
+num_episodes = 500
 max_steps_per_episode = 100
 target_update_frequency = 10
 
@@ -44,7 +39,6 @@ log_info(f"Training on device: {device}")
 seeker_agent = DQNAgent(state_dim, agent_action_dim, device=device)
 hider_agent = DQNAgent(state_dim, agent_action_dim, device=device)
 
-# Metrics
 rewards_seeker_list = []
 rewards_hider_list = []
 penalties_seeker_list = []
@@ -53,8 +47,6 @@ invalid_moves_seeker_list = []
 invalid_moves_hider_list = []
 
 door_mapping = {4: "toggle_door", 5: "lock", 6: "unlock"}
-best_reward_seeker = -np.inf
-best_reward_hider = -np.inf
 
 for episode in range(num_episodes):
     state = env.reset()
@@ -81,12 +73,12 @@ for episode in range(num_episodes):
             action_hider = door_mapping[hider_action_int]
         actions = {"seeker": action_seeker, "hider": action_hider}
 
-        next_state, done, door_rewards = env.step(actions)
+        next_state, done, step_rewards = env.step(actions)
         next_seeker_state = torch.tensor(next_state['seeker']['state'], dtype=torch.float32).to(device)
         next_hider_state = torch.tensor(next_state['hider']['state'], dtype=torch.float32).to(device)
 
-        reward_seeker = door_rewards.get("seeker", 0.0)
-        reward_hider = door_rewards.get("hider", 0.0)
+        reward_seeker = step_rewards.get("seeker", 0.0)
+        reward_hider = step_rewards.get("hider", 0.0)
         total_reward_seeker += reward_seeker
         total_reward_hider += reward_hider
 
@@ -99,8 +91,8 @@ for episode in range(num_episodes):
         seeker_agent.train_step()
         hider_agent.train_step()
 
-        # if step % 10 == 0:
-        #     env.render()
+        if step % 10 == 0:
+            env.render()
 
         if done:
             break
@@ -117,18 +109,8 @@ for episode in range(num_episodes):
         seeker_agent.update_target_network()
         hider_agent.update_target_network()
 
-    if total_reward_seeker > best_reward_seeker:
-        best_reward_seeker = total_reward_seeker
-        seeker_agent.save_model("best_seeker_dqn_model.pth")
-        log_info(f"New best seeker reward: {best_reward_seeker} - model saved.")
-
-    if total_reward_hider > best_reward_hider:
-        best_reward_hider = total_reward_hider
-        hider_agent.save_model("best_hider_dqn_model.pth")
-        log_info(f"New best hider reward: {best_reward_hider} - model saved.")
-
-# env.render()
-# plt.show()
+env.render()
+plt.show()
 
 metrics = {
     'rewards_seeker': rewards_seeker_list,

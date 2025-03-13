@@ -7,29 +7,18 @@ and uses agent classes from the agents package (Seeker and Hider) for managing a
 The grid is 10x10 and the room is a 4x4 area at the bottom right corner.
 Debug and informational output is standardized via the custom logger.
 
-Reward system:
-1. Door Action Rewards:
-   - Hider Actions:
-       * "toggle_door":
-            - If the hider toggles an open door (thus closing it): +2 reward.
-            - If the door is already closed, toggling opens it: -1 reward.
-       * "lock":
-            - If the hider locks the door when it is closed and the hider is inside the room: +4 reward.
-            - If the hider locks the door while it is open: -5 reward.
-       * "unlock":
-            - If the hider is inside the room and the door is closed and locked, unlocking it: -5 reward.
-   - Seeker Actions:
-       * If the seeker locks an open door, it receives +7 reward.
-2. Vision-Based Rewards (when the seeker is active):
-   - In every step that the active seeker sees the hider:
-         * Seeker gets +10 reward.
-         * Hider gets -10 reward.
-3. In-Room Reward for the Hider:
-   - Every step, if the hider is inside the room: +1 reward.
+Reward system (very simple):
+1. Vision-Based Reward (when the seeker is active):
+   - In each step, if the active seeker sees the hider (i.e. the hider's cell is in the
+     seeker's computed visible cells), then the seeker gets +1 reward and the hider gets -1 reward.
+2. In-Room Reward for the Hider:
+   - Every step, if the hider is inside the room (as determined by room.is_inside(cell)), the hider receives +1 reward.
 
-Additionally, the hider is spawned at reset while the seeker is spawned after 10 steps
-(to give the hider time to hide). When the seeker is inactive, its state and FOV are not rendered.
-The step() method returns a tuple: (observation, done, door_rewards).
+Door actions ("toggle_door", "lock", "unlock") are still available to both agents for interaction,
+but they no longer affect the reward.
+The hider is spawned at reset, while the seeker is spawned after 10 steps.
+When the seeker is inactive, its state and FOV are not rendered.
+The step() method returns a tuple: (observation, done, rewards).
 """
 
 import gym
@@ -63,7 +52,7 @@ class HideAndSeekEnv(gym.Env):
             "hider": spaces.Box(low=0, high=self.grid_size - 1, shape=(3,), dtype=np.int32)
         })
 
-        # Both agents: 0-3 for movement; 4 -> "toggle_door", 5 -> "lock", 6 -> "unlock"
+        # Both agents: 0-3 for movement; 4->"toggle_door", 5->"lock", 6->"unlock"
         self.action_space = spaces.Dict({
             "seeker": spaces.Discrete(7),
             "hider": spaces.Discrete(7)
@@ -168,13 +157,12 @@ class HideAndSeekEnv(gym.Env):
         hx, hy = get_valid_position()
         hider_dir = np.random.randint(0, 4)
         self.hider = Hider(hx, hy, hider_dir)
-        # Seeker is not spawned yet.
         self.seeker = None
 
         # log_debug(f"Hider initial state: {self.hider.get_state()}")
         return {
             "seeker": {
-                "state": (-1, -1, -1),  # Dummy state indicating inactive seeker
+                "state": (-1, -1, -1),  # Dummy state for inactive seeker
                 "visible": []
             },
             "hider": {
@@ -212,14 +200,14 @@ class HideAndSeekEnv(gym.Env):
     def step(self, actions):
         self.step_count += 1
         # log_debug(f"Step {self.step_count} starting...")
-        door_rewards = {"seeker": 0.0, "hider": 0.0}
+        rewards = {"seeker": 0.0, "hider": 0.0}
 
         # Spawn seeker after 10 steps if not active
         if not self.seeker_active and self.step_count >= 10:
             self.spawn_seeker()
             self.seeker_active = True
 
-        # Process door actions for agents on the door cell
+        # Process door actions for both agents (but no reward is given for door actions in the new system)
         for agent_key in ["seeker", "hider"]:
             action = actions.get(agent_key)
             if agent_key == "seeker" and not self.seeker_active:
@@ -227,41 +215,11 @@ class HideAndSeekEnv(gym.Env):
             agent = self.seeker if agent_key == "seeker" else self.hider
             x, y, _ = agent.get_state()
             if self.room.is_door((x, y)):
-                if action == "toggle_door":
-                    if agent_key == "hider":
-                        if self.room.door.is_open:
-                            self.room.door.toggle()
-                            if not self.room.door.is_open:
-                                door_rewards["hider"] += 2.0
-                        else:
-                            self.room.door.toggle()
-                            door_rewards["hider"] += -1.0
-                    else:
-                        self.room.door.toggle()
-                elif action == "lock":
-                    if agent_key == "hider":
-                        if not self.room.door.is_open:
-                            self.room.door.lock()
-                            if self.room.door.is_locked and self.room.is_inside((x, y)):
-                                door_rewards["hider"] += 4.0
-                        else:
-                            self.room.door.lock()
-                            door_rewards["hider"] += -5.0
-                    else:
-                        if self.room.door.is_open:
-                            self.room.door.lock()
-                            door_rewards["seeker"] += 7.0
-                        else:
-                            self.room.door.lock()
-                elif action == "unlock":
-                    if agent_key == "hider":
-                        if self.room.is_inside((x, y)) and (not self.room.door.is_open) and self.room.door.is_locked:
-                            self.room.door.unlock()
-                            door_rewards["hider"] += -5.0
-                        else:
-                            self.room.door.unlock()
-                    else:
-                        self.room.door.unlock()
+                if action in self.door_actions.values():
+                    self.room.door.toggle() if action == "toggle_door" else None
+                    self.room.door.lock() if action == "lock" else None
+                    self.room.door.unlock() if action == "unlock" else None
+                    # No door action rewards in the new simple reward system
 
         # Process movement actions
         for agent_key in ["seeker", "hider"]:
@@ -273,26 +231,24 @@ class HideAndSeekEnv(gym.Env):
             if isinstance(action, int) and action in self.moves:
                 dx, dy = self.moves[action]
                 agent = self.seeker if agent_key == "seeker" else self.hider
-                x, y, d = agent.get_state()
+                x, y, _ = agent.get_state()
                 if self.is_valid_move(x, y, dx, dy):
                     new_x, new_y = x + dx, y + dy
                     agent.update_state(x=new_x, y=new_y, direction=action)
-            #     else:
-            #         log_debug(f"{agent_key.capitalize()} move blocked. Staying at ({x}, {y})")
             # else:
             #     log_debug(f"{agent_key.capitalize()} action ({action}) is not a movement command.")
 
-        # Vision-based reward: if seeker is active, check visible cells.
+        # Vision-based reward: if seeker is active and sees the hider, seeker gets +1 and hider gets -1.
         if self.seeker_active:
             visible_seeker = set(self.compute_visible_cells(self.seeker.get_state()))
             hider_cell = self.hider.get_state()[:2]
             if hider_cell in visible_seeker:
-                door_rewards["seeker"] += 10.0
-                door_rewards["hider"] += -10.0
+                rewards["seeker"] += 1.0
+                rewards["hider"] += -1.0
 
-        # Extra reward: if the hider is inside the room, add +1 reward.
+        # In-Room Reward for hider: if hider is inside the room, add +1 reward.
         if self.room.is_inside(self.hider.get_state()[:2]):
-            door_rewards["hider"] += 1.0
+            rewards["hider"] += 1.0
 
         done = (self.step_count >= self.max_steps)
         obs = {
@@ -305,7 +261,7 @@ class HideAndSeekEnv(gym.Env):
                 "visible": self.compute_visible_cells(self.hider.get_state())
             }
         }
-        return obs, done, door_rewards
+        return obs, done, rewards
 
     def render(self, mode='human'):
         if not self.viewer_initialized:
@@ -319,7 +275,7 @@ if __name__ == "__main__":
     env = HideAndSeekEnv()
     observation = env.reset()
     env.render()
-    log_info("Environment visualized. Starting random actions loop...")
+    log_info("Environment visualized. Starting random actions loop...")  # Uncomment for debugging
     try:
         while True:
             hider_random = np.random.choice(list(range(7)))  # 0-3 movement; 4-6 door actions.
@@ -332,13 +288,13 @@ if __name__ == "__main__":
                 "seeker": seeker_action,
                 "hider": hider_action
             }
-            observation, done, door_rewards = env.step(actions)
+            observation, done, rewards = env.step(actions)
             env.render()
-            # log_debug(f"Door rewards: {door_rewards}")
+            # log_debug(f"Rewards: {rewards}")  # Uncomment for debugging
             if done:
-                log_info("Episode finished. Resetting environment...")
+                log_info("Episode finished. Resetting environment...")  # Uncomment for debugging
                 env.reset()
             plt.pause(0.5)
     except KeyboardInterrupt:
-        log_info("Exiting visualization loop.")
+        log_info("Exiting visualization loop.")  # Uncomment for debugging
         plt.close()
