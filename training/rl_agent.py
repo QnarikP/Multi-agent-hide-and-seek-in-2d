@@ -95,7 +95,7 @@ class DQNAgent:
 
         self.q_network = QNetwork(state_dim, action_dim).to(self.device)
         self.target_network = QNetwork(state_dim, action_dim).to(self.device)
-        # self.update_target_network()
+        self.update_target_network()
 
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr)
         self.loss_fn = nn.MSELoss()

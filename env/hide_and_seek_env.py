@@ -4,7 +4,7 @@ env/hide_and_seek_env.py
 This module defines the HideAndSeekEnv environment for a multi-agent hide and seek project.
 It leverages the Room class (from env.room) for room layout and door properties,
 and uses agent classes from the agents package (Seeker and Hider) for managing agent state.
-The grid is 10x10 and the room is a 4x4 area at the bottom right corner.
+The grid is 10x10 and the room is a 4x4 area in the bottom right corner.
 Debug and informational output is standardized via the custom logger.
 
 Reward system (very simple):
@@ -42,7 +42,7 @@ class HideAndSeekEnv(gym.Env):
         # Grid dimensions
         self.grid_size = 10
 
-        # Initialize a 4x4 room at the bottom right corner (top_left=(6,6))
+        # Initialize a 4x4 room in the bottom right corner (top_left=(6,6))
         self.room = Room(top_left=(self.grid_size - 4, self.grid_size - 4), width=4, height=4, door_side="left")
         # log_debug(f"Using room at {self.room.top_left} with door at {self.room.door.position}")
 

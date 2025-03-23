@@ -71,7 +71,7 @@ for episode in range(num_test_episodes):
 
         # Render the environment and capture an RGB frame.
         render_environment(ax, env)
-        plt.pause(0.001)
+        plt.pause(0.5)
         frame = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8)
         width, height = fig.canvas.get_width_height()
         frame = frame.reshape((height, width, 4))

@@ -7,7 +7,7 @@ It includes two classes:
     - Room: Defines the room boundaries, computes wall cells (excluding the door cell),
             and provides helper methods to check if a given cell is part of the room, a wall, or the door.
 
-The room is defined as a 4x4 area located at the bottom right corner of a 10x10 grid.
+The room is defined as a 4x4 area located in the bottom right corner of a 10x10 grid.
 The door is located on the left wall, at the center cell.
 """
 
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     import matplotlib.patches as patches
 
     grid_size = 10
-    # Create a 4x4 room at the bottom right corner (top_left=(6,6) because 10-4=6)
+    # Create a 4x4 room in the bottom right corner (top_left=(6,6) because 10-4=6)
     room = Room(top_left=(6, 6), width=4, height=4, door_side="left")
 
     fig, ax = plt.subplots()

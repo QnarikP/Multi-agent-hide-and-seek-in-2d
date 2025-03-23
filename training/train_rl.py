@@ -16,7 +16,6 @@ At each step:
 This version ensures GPU usage (if available) and uses our visualization utilities.
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from env.hide_and_seek_env import HideAndSeekEnv
